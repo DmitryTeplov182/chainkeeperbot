@@ -1,6 +1,6 @@
 services:
   chainkeeper-bot:
-    image: dteplov/chainkeeperbot
+    build: .
     container_name: chainkeeper-bot
     ports:
       - "8080:8080"
