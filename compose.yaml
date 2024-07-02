@@ -12,5 +12,3 @@ services:
       STRAVA_AUTH_URL: ${STRAVA_AUTH_URL}
       STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI}
       PORT: ${PORT}
-    volumes:
-      - ./html:/root/html
