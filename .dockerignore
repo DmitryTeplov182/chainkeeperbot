@@ -1,0 +1,7 @@
+# Exclude these files and directories from the build context
+Dockerfile
+.dockerignore
+.git
+.gitignore
+README.TXT
+compose.yaml

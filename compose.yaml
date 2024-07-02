@@ -1,0 +1,16 @@
+services:
+  chainkeeper-bot:
+    build: .
+    container_name: chainkeeper-bot
+    ports:
+      - "8080:8080"
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MONGODB_URI: ${MONGODB_URI}
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+      STRAVA_AUTH_URL: ${STRAVA_AUTH_URL}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI}
+      PORT: ${PORT}
+    volumes:
+      - ./html:/root/html
