@@ -170,14 +170,8 @@ func handleUpdate(message *tgbotapi.Message) {
 	case "❌ Forget me":
 		deleteUserByID(userID)
 		sendMessage(userID, "Your data has been deleted.\n\nUse /start to run again.")
-	case "🔄 Update Strava Data":
-		err := fetchStravaActivities(user)
-		if err != nil {
-			sendMessage(userID, fmt.Sprintf("Failed to update Strava data: %v", err))
-		} else {
-			sendMessage(userID, "Strava data updated successfully.")
-			showChainStatus(userID)
-		}
+	case "📊 Show Stats":
+		showChainStatus(userID)
 	default:
 		state, err := getSurveyStateByID(userID)
 		if err == nil {
@@ -322,12 +316,12 @@ func showChainStatus(userID int64) {
 	btnChangeLubeInterval := tgbotapi.NewKeyboardButton("🔧 Change chain lube interval")
 	btnChangeCleanInterval := tgbotapi.NewKeyboardButton("🔧 Change chain clean interval")
 	btnForgetMe := tgbotapi.NewKeyboardButton("❌ Forget me")
-	btnUpdateStrava := tgbotapi.NewKeyboardButton("🔄 Update Strava Data")
+	btnShowStats := tgbotapi.NewKeyboardButton("📊 Show Stats")
 
 	keyboard := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(btnClean, btnLube),
 		tgbotapi.NewKeyboardButtonRow(btnChangeLubeInterval, btnChangeCleanInterval),
-		tgbotapi.NewKeyboardButtonRow(btnForgetMe, btnUpdateStrava),
+		tgbotapi.NewKeyboardButtonRow(btnForgetMe, btnShowStats),
 	)
 
 	msg.ReplyMarkup = keyboard
@@ -562,6 +556,7 @@ func updateAllUsersStravaData() {
 				log.Printf("Failed to fetch Strava activities for user %d: %v", user.UserID, err)
 			}
 		}
+		time.Sleep(time.Minute)
 	}
 
 	if err := cursor.Err(); err != nil {
