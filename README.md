@@ -2,7 +2,7 @@
 
 ChainKeeper Bot is a Telegram bot that helps you keep track of your bicycle chain maintenance by integrating with Strava. It monitors the distance you've traveled and reminds you when it's time to clean or lube your chain.
 
-I would like to host the bot for everyone, but Strava has a limit on the number of athletes for developer applications. I have requested an extension for this limit but have not received a response yet.
+You can use my instance [https://t.me/chainkeeper_bot](https://t.me/chainkeeper_bot) or host it by yourself.
 
 ## Features
 
