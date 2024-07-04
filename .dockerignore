@@ -3,5 +3,6 @@ Dockerfile
 .dockerignore
 .git
 .gitignore
-README.TXT
+README.md
 compose.yaml
+compose.local.yaml

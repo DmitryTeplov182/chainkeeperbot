@@ -28,17 +28,22 @@ var (
 )
 
 type User struct {
-	UserID                  int64   `bson:"user_id"`
-	LastChainCleanDate      string  `bson:"last_chain_clean_date"`
-	ChainCleanInterval      int     `bson:"chain_clean_interval"`
-	LastChainLubeDate       string  `bson:"last_chain_lube_date"`
-	ChainLubeInterval       int     `bson:"chain_lube_interval"`
-	StravaAccessToken       string  `bson:"strava_access_token"`
-	StravaRefreshToken      string  `bson:"strava_refresh_token"`
-	StravaTokenExpiry       int64   `bson:"strava_token_expiry"`
-	TotalDistanceAfterClean float64 `bson:"total_distance_after_clean"`
-	TotalDistanceAfterLube  float64 `bson:"total_distance_after_lube"`
+	UserID                  int64     `bson:"user_id"`
+	LastChainCleanDate      string    `bson:"last_chain_clean_date"`
+	ChainCleanInterval      int       `bson:"chain_clean_interval"`
+	LastChainLubeDate       string    `bson:"last_chain_lube_date"`
+	ChainLubeInterval       int       `bson:"chain_lube_interval"`
+	StravaAccessToken       string    `bson:"strava_access_token"`
+	StravaRefreshToken      string    `bson:"strava_refresh_token"`
+	StravaTokenExpiry       int64     `bson:"strava_token_expiry"`
+	TotalDistanceAfterClean float64   `bson:"total_distance_after_clean"`
+	TotalDistanceAfterLube  float64   `bson:"total_distance_after_lube"`
+	LastUpdateDate          time.Time `bson:"last_update_date"`
 }
+
+var (
+	updateInterval int
+)
 
 type Activity struct {
 	Distance  float64 `json:"distance"`
@@ -73,12 +78,19 @@ func main() {
 		"STRAVA_AUTH_URL",
 		"STRAVA_REDIRECT_URI",
 		"PORT",
+		"UPDATE_INTERVAL_HOURS",
+		"TELEGRAM_ADMIN_ID",
 	}
 
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
 			log.Fatalf("Environment variable %s must be set", envVar)
 		}
+	}
+
+	updateInterval, err = strconv.Atoi(os.Getenv("UPDATE_INTERVAL_HOURS"))
+	if err != nil || updateInterval <= 0 {
+		log.Fatalf("Invalid UPDATE_INTERVAL_HOURS: %v", err)
 	}
 
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -150,6 +162,8 @@ func handleUpdate(message *tgbotapi.Message) {
 		switch message.Command() {
 		case "start":
 			handleStartCommand(userID)
+		case "manual_update":
+			handleManualUpdateCommand(userID)
 		default:
 			sendMessage(userID, "I don't know that command")
 		}
@@ -170,7 +184,7 @@ func handleUpdate(message *tgbotapi.Message) {
 	case "❌ Forget me":
 		deleteUserByID(userID)
 		sendMessage(userID, "Your data has been deleted.\n\nUse /start to run again.")
-	case "📊 Show Stats":
+	case "📈 Show Stats":
 		showChainStatus(userID)
 	default:
 		state, err := getSurveyStateByID(userID)
@@ -291,12 +305,8 @@ func updateUser(user *User) {
 
 func isDataTooOld(user *User) bool {
 	now := time.Now()
-	lastCleanDate, _ := time.Parse("2006-01-02", user.LastChainCleanDate)
-	lastLubeDate, _ := time.Parse("2006-01-02", user.LastChainLubeDate)
-
-	oneMonthAgo := now.AddDate(0, -1, 0)
-
-	return lastCleanDate.Before(oneMonthAgo) || lastLubeDate.Before(oneMonthAgo)
+	lastUpdateDate := user.LastUpdateDate
+	return now.Sub(lastUpdateDate).Hours() >= float64(updateInterval)
 }
 
 func showChainStatus(userID int64) {
@@ -551,12 +561,12 @@ func updateAllUsersStravaData() {
 			continue
 		}
 
-		if user.StravaAccessToken != "" {
+		if user.StravaAccessToken != "" && isDataTooOld(&user) {
 			if err := fetchStravaActivities(&user); err != nil {
 				log.Printf("Failed to fetch Strava activities for user %d: %v", user.UserID, err)
 			}
+			time.Sleep(time.Minute) // Pause for 1 minute between updates
 		}
-		time.Sleep(time.Minute)
 	}
 
 	if err := cursor.Err(); err != nil {
@@ -641,6 +651,7 @@ func fetchStravaActivities(user *User) error {
 
 	user.TotalDistanceAfterClean = totalDistanceAfterClean / 1000 // Convert meters to kilometers
 	user.TotalDistanceAfterLube = totalDistanceAfterLube / 1000   // Convert meters to kilometers
+	user.LastUpdateDate = time.Now()                              // Update the last update time
 
 	updateUser(user)
 	log.Printf("Updated user %d: TotalDistanceAfterClean=%.2f, TotalDistanceAfterLube=%.2f", user.UserID, user.TotalDistanceAfterClean, user.TotalDistanceAfterLube)
@@ -693,4 +704,49 @@ func refreshStravaToken(user *User) error {
 
 	updateUser(user)
 	return nil
+}
+
+func handleManualUpdateCommand(userID int64) {
+	adminID, err := strconv.ParseInt(os.Getenv("TELEGRAM_ADMIN_ID"), 10, 64)
+	if err != nil {
+		log.Printf("Invalid TELEGRAM_ADMIN_ID: %v", err)
+		return
+	}
+
+	if userID == adminID {
+		go func() {
+			cursor, err := usersCollection.Find(context.TODO(), bson.M{})
+			if err != nil {
+				log.Printf("Failed to fetch users: %v", err)
+				sendMessage(userID, "Failed to fetch users.")
+				return
+			}
+			defer cursor.Close(context.Background())
+
+			for cursor.Next(context.Background()) {
+				var user User
+				if err := cursor.Decode(&user); err != nil {
+					log.Printf("Failed to decode user: %v", err)
+					sendMessage(adminID, fmt.Sprintf("Failed to decode user: %v", err))
+					continue
+				}
+
+				if user.StravaAccessToken != "" {
+					if err := fetchStravaActivities(&user); err != nil {
+						log.Printf("Failed to fetch Strava activities for user %d: %v", user.UserID, err)
+						sendMessage(adminID, fmt.Sprintf("Failed to fetch Strava activities for user %d: %v", user.UserID, err))
+					}
+					time.Sleep(time.Minute) // Pause for 1 minute between updates
+				}
+			}
+
+			if err := cursor.Err(); err != nil {
+				log.Printf("Cursor error: %v", err)
+			}
+
+			sendMessage(userID, "Manual update completed.")
+		}()
+	} else {
+		sendMessage(userID, "You are not authorized to perform this action.")
+	}
 }
